@@ -19,6 +19,10 @@ jobs:
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-${{ matrix.target }}
+          cache-on-failure: true
       - uses: docker/setup-qemu-action@v3
         if: runner.arch == 'ARM64'
         with:
@@ -28,7 +32,13 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y clang libclang-dev cmake pkg-config libssl-dev libglib2.0-dev
+          if [ "$(uname -m)" = aarch64 ]; then
+            sudo apt-get install -y libc6-amd64-cross libgcc-s1-amd64-cross libstdc++6-amd64-cross
+            echo 'QEMU_LD_PREFIX=/usr/x86_64-linux-gnu' >> "$GITHUB_ENV"
+          fi
           git clone --depth 1 --branch v147.0.0 --recurse-submodules --shallow-submodules https://github.com/denoland/rusty_v8.git /tmp/rusty_v8
+          # 系统标准库不保证间接包含 memory，显式补齐上游头文件依赖。
+          sed -i '1i#include <memory>' /tmp/rusty_v8/v8/src/bigint/bigint.h
           printf '\n[patch.crates-io]\nv8 = { path = "/tmp/rusty_v8" }\n' >> Cargo.toml
       - name: Build wheel
         shell: bash
