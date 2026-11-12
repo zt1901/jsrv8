@@ -1,0 +1,25 @@
+name: Publish verified jsrv8 wheels
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Verified build run ID
+        required: true
+permissions:
+  actions: read
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          pattern: jsrv8-*
+          merge-multiple: true
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true
