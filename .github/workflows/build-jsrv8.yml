@@ -1,0 +1,45 @@
+name: Build jsrv8 wheels
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux build tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y clang libclang-dev cmake pkg-config libssl-dev
+      - name: Build wheel
+        shell: bash
+        env:
+          V8_FROM_SOURCE: ${{ runner.os == 'Linux' && '1' || '0' }}
+          GN_ARGS: use_custom_libcxx=false is_component_build=false v8_monolithic=true v8_use_external_startup_data=false v8_enable_sandbox=false is_debug=false use_sysroot=false is_clang=true
+        run: |
+          python -m pip install maturin
+          maturin build --release --target ${{ matrix.target }} --out dist
+      - name: Verify native runtime
+        shell: bash
+        run: |
+          python -m pip install dist/*.whl
+          python -c "import jsrv8; c=jsrv8.Context(); assert c.eval('Promise.resolve(42)',return_value=True)==42; assert c.eval('WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0]))',return_value=True); del c"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jsrv8-${{ matrix.target }}
+          path: dist/*.whl
